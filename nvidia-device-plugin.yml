@@ -23,8 +23,11 @@ spec:
         operator: Exists
         effect: NoSchedule
       containers:
-      - image: nvidia/k8s-device-plugin:1.11
+      - image: jianghang8421/k8s-device-plugin:1.11-shared
         name: nvidia-device-plugin-ctr
+        env:
+          - name: DP_CONTAINERS_PER_GPU
+            value: '10'
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

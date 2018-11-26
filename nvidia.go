@@ -22,14 +22,18 @@ func getDevices() []*pluginapi.Device {
 	n, err := nvml.GetDeviceCount()
 	check(err)
 
+	containersPerGPU := getNumOfContainersPerGPU()
 	var devs []*pluginapi.Device
-	for i := uint(0); i < n; i++ {
-		d, err := nvml.NewDeviceLite(i)
-		check(err)
-		devs = append(devs, &pluginapi.Device{
-			ID:     d.UUID,
-			Health: pluginapi.Healthy,
-		})
+	for j := uint(0); j < containersPerGPU; j++ {
+		for i := uint(0); i < n; i++ {
+			d, err := nvml.NewDeviceLite(i)
+			check(err)
+			virtualGPUDeviceID := generateVirtualGPUDeviceID(d.UUID, j)
+			devs = append(devs, &pluginapi.Device{
+				ID:     virtualGPUDeviceID,
+				Health: pluginapi.Healthy,
+			})
+		}
 	}
 
 	return devs
@@ -49,7 +53,8 @@ func watchXIDs(ctx context.Context, devs []*pluginapi.Device, xids chan<- *plugi
 	defer nvml.DeleteEventSet(eventSet)
 
 	for _, d := range devs {
-		err := nvml.RegisterEventForDevice(eventSet, nvml.XidCriticalError, d.ID)
+		realDeviceID := getRealDeviceID(d.ID)
+		err := nvml.RegisterEventForDevice(eventSet, nvml.XidCriticalError, realDeviceID)
 		if err != nil && strings.HasSuffix(err.Error(), "Not Supported") {
 			log.Printf("Warning: %s is too old to support healthchecking: %s. Marking it unhealthy.", d.ID, err)
 
@@ -90,7 +95,7 @@ func watchXIDs(ctx context.Context, devs []*pluginapi.Device, xids chan<- *plugi
 		}
 
 		for _, d := range devs {
-			if d.ID == *e.UUID {
+			if getRealDeviceID(d.ID) == *e.UUID {
 				xids <- d
 			}
 		}
